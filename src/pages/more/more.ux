@@ -167,14 +167,18 @@ export default {
     const record = this.matchOk ? setRule(this.record, rule) : this.record
     if (record !== this.record) {
       this.record = record
-      this.store.saveMatch(record).then(() => this.render())
+      this.store.saveMatch(record).then(() => {
+        if (!this.destroyed) this.render()
+      })
     }
     this.render()
   },
 
-  // 保存设置；写入结束后再刷新一次，让写入失败的错误码显示出来
+  // 保存设置；写入结束后再刷新一次，让写入失败的错误码显示出来（页面已经返回就不刷新）
   saveSettings() {
-    this.store.saveSettings(this.settings).then(() => this.render())
+    this.store.saveSettings(this.settings).then(() => {
+      if (!this.destroyed) this.render()
+    })
   },
 
   toggleVibrate() {
