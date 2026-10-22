@@ -20,7 +20,7 @@
 |---|---|
 | `npm test` | 运行规则、记录、存储、设备模块的单元测试 |
 | `npm run build` | 生成调试包 `dist/com.curain.badminton.debug.<版本>.rpk` |
-| `npm run release` | 生成发布包（需要 `sign/` 下的证书，见下文） |
+| `npm run release` | 生成发布包（需要 `sign/release/` 下的证书，见下文） |
 | `npm run icon` | 重新生成应用图标 |
 | `npm run emu:create` | 创建手环10 尺寸（212×520）的模拟器，只需一次；本地缺 `vela-watch-5.0` 镜像时会自动下载 |
 | `npm run emu:start` | 启动模拟器并保持运行，放在单独一个终端里 |
@@ -62,18 +62,18 @@
 
 如果手环拒绝安装，先把 `src/manifest.json` 里的 `minPlatformVersion` 从 1200 改成 1000 再试一次，仍然装不上再看下一节的发布包签名。
 
-如果「屏幕常亮」开着，手环还是会息屏，说明手环没有响应应用的常亮请求（设计文档第 7 节第 2 项，待真机确认）。到手环的系统设置里调长息屏时间，或者打开「持续亮屏」（不同固件里的名字可能略有不同）。
+如果「屏幕常亮」开着，手环还是会息屏，说明手环没有响应应用的常亮请求（设计文档第 7 节第 2 项，待真机确认）。到手环的系统设置里调长息屏时间（最长只有 5 分钟），或者打开「持续亮屏」（不同固件里的名字可能略有不同；可设 5–20 分钟，小米提示开启后会明显增加耗电）。
 
 更多页版本号后面如果带了错误码，是最近一次出错留下的（零售手环没有调试控制台）：`S1` 读取存储失败，`S2` 写入存储失败，`S3` 存储里的比赛记录损坏或版本不认识、已丢弃并开了新比赛，`V` 振动失败，`K` 屏幕常亮失败。
 
 ## 发布包签名（只在调试包装不上时需要）
 
-    mkdir -p sign
-    openssl req -newkey rsa:2048 -nodes -keyout sign/private.pem -x509 -days 3650 -out sign/certificate.pem -subj "/CN=badminton"
+    mkdir -p sign/release
+    openssl req -newkey rsa:2048 -nodes -keyout sign/release/private.pem -x509 -days 3650 -out sign/release/certificate.pem -subj "/CN=badminton"
 
 `sign/` 已在 `.gitignore` 中，私钥要另外备份；以后所有发布包都必须用同一个证书。
 
-注意：`sign/` 一旦存在，调试包也会用它签名。工具包找证书的顺序是：调试包 `sign/debug/` → `sign/` → 工具包自带的默认证书；发布包 `sign/release/` → `sign/`。所以这时调试包的签名证书和之前装机用的不一样，手环可能拒绝升级安装，要先在手环上卸载旧版再装（卸载可能会清掉已保存的比赛）。想让调试包继续用默认证书，可以把证书放进 `sign/release/`，只给发布包用。
+证书放在 `sign/release/`，只给发布包用，调试包继续用工具包自带的默认证书。不要直接放在 `sign/` 下。工具包找证书的顺序是：调试包 `sign/debug/` → `sign/` → 工具包自带的默认证书；发布包 `sign/release/` → `sign/`。放在 `sign/` 下的话，调试包也会改用它签名，签名证书和之前装机用的不一样，手环可能拒绝升级安装，要先在手环上卸载旧版再装（卸载可能会清掉已保存的比赛）。
 
 ## 依赖安全提示
 
