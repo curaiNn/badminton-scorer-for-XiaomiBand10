@@ -849,6 +849,7 @@ test('normalize 拒绝坏数据', () => {
     { v: 1, rule: 21, pts: '', acked: 1.5 },
     { v: 1, rule: 21, pts: 'R', acked: 1 },
     { v: 1, rule: 21, pts: R(21) + R(21) + 'B', acked: 1 },
+    { v: 1, rule: 21, pts: R(21) + 'RR', acked: 0 },
   ]
   for (const raw of bad) assert.equal(normalize(raw), null, JSON.stringify(raw))
 })
