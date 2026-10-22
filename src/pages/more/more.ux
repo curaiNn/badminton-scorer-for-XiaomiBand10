@@ -91,6 +91,7 @@ export default {
   armTimer: 0,
   armedAt: 0,
   tapAt: 0,
+  leaving: false, // 已经在返回计分页：防止保存回调和「返回计分」各返回一次，第二次会直接退出应用
   version: '',
 
   onInit() {
@@ -139,7 +140,7 @@ export default {
   // 设置总是保存；本场比赛还没开始时，同时改本场的赛制
   pickRule(rule) {
     rule = Number(rule)
-    if (!this.loaded || !isRule(rule) || rule === this.settings.rule) return
+    if (!this.loaded || this.leaving || !isRule(rule) || rule === this.settings.rule) return
     if (!this.guard()) return
     this.settings = withSetting(this.settings, 'rule', rule)
     this.saveSettings()
@@ -158,14 +159,14 @@ export default {
   },
 
   toggleVibrate() {
-    if (!this.loaded || !this.guard()) return
+    if (!this.loaded || this.leaving || !this.guard()) return
     this.settings = withSetting(this.settings, 'vibrate', !this.settings.vibrate)
     this.saveSettings()
     this.render()
   },
 
   toggleKeepOn() {
-    if (!this.loaded || !this.guard()) return
+    if (!this.loaded || this.leaving || !this.guard()) return
     this.settings = withSetting(this.settings, 'keepOn', !this.settings.keepOn)
     this.saveSettings()
     this.render()
@@ -182,7 +183,7 @@ export default {
   // 第一次点击进入待确认状态，3 秒内再点才执行；执行后存盘并回到计分页
   confirm(kind) {
     // 没读到比赛记录时不能清零：清零结果会覆盖存储里的比赛（版本号后会显示 S1）
-    if (!this.loaded || (kind === 'reset' && !this.matchOk)) return
+    if (!this.loaded || this.leaving || (kind === 'reset' && !this.matchOk)) return
     if (!this.guard()) return
     if (this.armed !== kind) {
       clearTimeout(this.armTimer)
@@ -200,10 +201,15 @@ export default {
     clearTimeout(this.armTimer)
     this.armed = ''
     const record = kind === 'reset' ? resetGame(this.record) : newMatch(this.settings.rule)
-    // 写入成功才回计分页；失败时留在本页，版本号后显示 S2
+    // 写入成功才回计分页；失败时留在本页，版本号后显示 S2。等待写入期间已算「正在离开」，其他操作一律忽略
+    this.leaving = true
     this.store.saveMatch(record).then((ok) => {
-      if (ok) router.back()
-      else this.render()
+      if (ok) {
+        router.back()
+      } else {
+        this.leaving = false
+        this.render()
+      }
     })
   },
 
@@ -216,7 +222,8 @@ export default {
   },
 
   goBack() {
-    if (!this.guard()) return
+    if (this.leaving || !this.guard()) return
+    this.leaving = true
     router.back()
   },
 }
