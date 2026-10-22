@@ -612,8 +612,8 @@ export function deriveMatch(record) {
   let valid = true
 
   for (let i = 0; i < record.pts.length; i++) {
-    if (matchWinner) {
-      valid = false // 比赛结束后还有得分，说明数据损坏
+    if (matchWinner || games.length > record.acked) {
+      valid = false // 比赛结束后、或在用户还没开始的局里有得分，说明数据损坏
       break
     }
     const side = record.pts[i]
@@ -798,6 +798,12 @@ test('撤回结束比赛的那一分', () => {
   assert.deepEqual(s.current, { index: 1, red: 20, blue: 0 })
 })
 
+test('决胜局中撤销：acked 保持 2', () => {
+  const back = undo(rec(21, R(21) + B(21) + R(5), 2))
+  assert.deepEqual(back, rec(21, R(21) + B(21) + R(4), 2))
+  assert.equal(deriveMatch(back).phase, 'playing')
+})
+
 test('本局清零：进行中的局回到 0:0，保留之前的局', () => {
   const reset = resetGame(rec(21, R(21) + 'RRB', 1))
   assert.deepEqual(reset, rec(21, R(21), 1))
@@ -855,7 +861,7 @@ export PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH"
 npm test
 ```
 
-Expected: rules 的 15 个测试通过；match.test.mjs 因找不到 `src/common/match.js` 而 FAIL。
+Expected: rules 的 18 个测试通过；match.test.mjs 因找不到 `src/common/match.js` 而 FAIL。
 
 - [ ] **Step 3: 实现 match.js**
 
@@ -904,7 +910,8 @@ function reachedSwap(before, after, rule) {
 export function undo(record) {
   if (!record.pts) return record
   const pts = record.pts.slice(0, -1)
-  const completed = deriveMatch(make(record.rule, pts, 0)).completed
+  // 用原来的 acked 推算：rules 会把「还没开始的局里有得分」判为无效并停止回放，传 0 会少算已结束的局
+  const completed = deriveMatch(make(record.rule, pts, record.acked)).completed
   return make(record.rule, pts, Math.min(record.acked, completed))
 }
 
@@ -968,7 +975,7 @@ export PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH"
 npm test
 ```
 
-Expected: `# pass 36`（rules 15 个，match 21 个），`# fail 0`。
+Expected: `# pass 40`（rules 18 个，match 22 个），`# fail 0`。
 
 - [ ] **Step 5: Commit**
 
@@ -1189,7 +1196,7 @@ export PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH"
 npm test
 ```
 
-Expected: `# pass 46`（加上 store 的 10 个），`# fail 0`，整体用时在 1 秒以内。如果用时接近 1.5 秒，说明有计时器没被清掉。
+Expected: `# pass 50`（加上 store 的 10 个），`# fail 0`，整体用时在 1 秒以内。如果用时接近 1.5 秒，说明有计时器没被清掉。
 
 - [ ] **Step 5: Commit**
 
@@ -1374,7 +1381,7 @@ export PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH"
 npm test
 ```
 
-Expected: `# pass 54`（加上 device 的 8 个），`# fail 0`。
+Expected: `# pass 58`（加上 device 的 8 个），`# fail 0`。
 
 - [ ] **Step 5: Commit**
 
@@ -1900,7 +1907,7 @@ export PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH"
 npm run build && npm test
 ```
 
-Expected: 构建成功、生成 rpk；单元测试仍是 `# pass 54`。如果构建报 `missing feature`，把提示的模块加进 manifest。
+Expected: 构建成功、生成 rpk；单元测试仍是 `# pass 58`。如果构建报 `missing feature`，把提示的模块加进 manifest。
 
 - [ ] **Step 3: Commit**
 
@@ -2245,7 +2252,7 @@ export PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH"
 npm run build && npm test
 ```
 
-Expected: 构建成功；单元测试 `# pass 54`。
+Expected: 构建成功；单元测试 `# pass 58`。
 
 - [ ] **Step 3: Commit**
 
@@ -2418,7 +2425,7 @@ export PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH"
 npm test && npm run build && ls -l dist/
 ```
 
-Expected: 测试 `# pass 54`；`dist/com.curain.badminton.debug.1.0.0.rpk` 存在。
+Expected: 测试 `# pass 58`；`dist/com.curain.badminton.debug.1.0.0.rpk` 存在。
 
 - [ ] **Step 4: Commit**
 
