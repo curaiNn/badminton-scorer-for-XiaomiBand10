@@ -141,7 +141,8 @@ export default {
     this.visible = false
     this.hideBanner() // 后台时计时器冻结，「再滑一次退出」之类的提示会超过时限还留着
     this.device.keepScreenOn(false)
-    if (this.dirty) this.save() // 上次写入失败，退到后台前再补存一次。不等待结果
+    // 上次写入失败，退到后台前再补存一次，不等待结果。重新读取期间不补存，以免覆盖更多页刚做的修改
+    if (this.dirty && !this.loading) this.save()
   },
 
   onDestroy() {
