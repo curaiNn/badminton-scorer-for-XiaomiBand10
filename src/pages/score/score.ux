@@ -1,0 +1,26 @@
+<template>
+  <div class="page">
+    <text class="hello">计分页</text>
+  </div>
+</template>
+
+<script>
+export default {
+  private: {}
+}
+</script>
+
+<style>
+.page {
+  width: 212px;
+  height: 520px;
+  justify-content: center;
+  align-items: center;
+  background-color: #000000;
+}
+
+.hello {
+  font-size: 20px;
+  color: #eeeeee;
+}
+</style>
