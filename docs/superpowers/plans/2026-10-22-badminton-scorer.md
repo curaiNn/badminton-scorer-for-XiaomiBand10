@@ -1197,7 +1197,7 @@ export PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH"
 npm test
 ```
 
-Expected: `# pass 50`（加上 store 的 10 个），`# fail 0`，整体用时在 1 秒以内。如果用时接近 1.5 秒，说明有计时器没被清掉。
+Expected: `# pass 52`（加上 store 的 10 个），`# fail 0`，整体用时在 1 秒以内。如果用时接近 1.5 秒，说明有计时器没被清掉。
 
 - [ ] **Step 5: Commit**
 
@@ -1382,7 +1382,7 @@ export PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH"
 npm test
 ```
 
-Expected: `# pass 58`（加上 device 的 8 个），`# fail 0`。
+Expected: `# pass 60`（加上 device 的 8 个），`# fail 0`。
 
 - [ ] **Step 5: Commit**
 
@@ -1908,7 +1908,7 @@ export PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH"
 npm run build && npm test
 ```
 
-Expected: 构建成功、生成 rpk；单元测试仍是 `# pass 58`。如果构建报 `missing feature`，把提示的模块加进 manifest。
+Expected: 构建成功、生成 rpk；单元测试仍是 `# pass 60`。如果构建报 `missing feature`，把提示的模块加进 manifest。
 
 - [ ] **Step 3: Commit**
 
@@ -2253,7 +2253,7 @@ export PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH"
 npm run build && npm test
 ```
 
-Expected: 构建成功；单元测试 `# pass 58`。
+Expected: 构建成功；单元测试 `# pass 60`。
 
 - [ ] **Step 3: Commit**
 
@@ -2426,7 +2426,7 @@ export PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH"
 npm test && npm run build && ls -l dist/
 ```
 
-Expected: 测试 `# pass 58`；`dist/com.curain.badminton.debug.1.0.0.rpk` 存在。
+Expected: 测试 `# pass 60`；`dist/com.curain.badminton.debug.1.0.0.rpk` 存在。
 
 - [ ] **Step 4: Commit**
 
