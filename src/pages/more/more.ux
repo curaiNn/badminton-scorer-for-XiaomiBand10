@@ -46,7 +46,7 @@ import storage from '@system.storage'
 import app from '@system.app'
 import { isRule } from '../../common/rules.js'
 import { newMatch, resetGame, setRule } from '../../common/match.js'
-import { createStore } from '../../common/store.js'
+import { createStore, DEFAULT_SETTINGS } from '../../common/store.js'
 
 const CONFIRM_MS = 3000 // 二次确认的等待时间
 const CONFIRM_MIN_MS = 400 // 武装后至少过这么久，第二次点击才算确认
@@ -92,6 +92,8 @@ export default {
   armedAt: 0,
   tapAt: 0,
   leaving: false, // 已经在返回计分页：防止保存回调和「返回计分」各返回一次，第二次会直接退出应用
+  saving: false, // 本局清零/新比赛正在存盘
+  destroyed: false,
   version: '',
 
   onInit() {
@@ -101,17 +103,34 @@ export default {
     } catch (e) {
       this.version = ''
     }
-    Promise.all([this.store.loadSettings(), this.store.loadMatch()]).then(([s, m]) => {
-      this.settings = s.settings
-      this.matchOk = m.ok
-      this.record = m.record || newMatch(s.settings.rule)
-      this.loaded = true
-      this.render()
-    })
+    Promise.all([this.store.loadSettings(), this.store.loadMatch()])
+      .then(([s, m]) => {
+        // 设置读取失败时 s.settings 是默认值，页面照常显示，开关保存的就是显示出来的值（接受这个取舍；版本号后会显示 S1）
+        this.settings = s.settings
+        this.matchOk = m.ok
+        this.record = m.record || newMatch(s.settings.rule)
+        this.loaded = true
+        this.render()
+      })
+      .catch(() => {
+        // 兜底：加载过程中出了意外，用默认设置，并按「没读到比赛记录」处理，不改写存储里的比赛，保证页面能用
+        if (this.loaded) return
+        this.settings = Object.assign({}, DEFAULT_SETTINGS)
+        this.matchOk = false
+        this.record = newMatch(this.settings.rule)
+        this.loaded = true
+        this.render()
+      })
   },
 
   onDestroy() {
+    this.destroyed = true
     clearTimeout(this.armTimer)
+  },
+
+  // 正在存盘时拦下系统右滑，由存盘回调负责唯一一次返回，避免连计分页一起退出
+  onBackPress() {
+    return this.saving
   },
 
   render() {
@@ -134,7 +153,7 @@ export default {
     this.newText = newArmed ? '再点一次确认' : '新比赛'
     // 本页自己的错误优先：它能解释为什么显示的是默认设置
     const code = this.store.lastError() || this.err
-    this.versionText = code ? this.version + ' · ' + code : this.version
+    this.versionText = [this.version, code].filter(Boolean).join(' · ')
   },
 
   // 设置总是保存；本场比赛还没开始时，同时改本场的赛制
@@ -184,8 +203,13 @@ export default {
   confirm(kind) {
     // 没读到比赛记录时不能清零：清零结果会覆盖存储里的比赛（版本号后会显示 S1）
     if (!this.loaded || this.leaving || (kind === 'reset' && !this.matchOk)) return
+    const age = Date.now() - this.armedAt
+    // 武装超过 3 秒就算过期：息屏时定时器会冻结，醒来后 armed 可能还没被清掉，这时重新进入待确认
+    const armed = this.armed === kind && age <= CONFIRM_MS
+    // 防抖之外再加一道：即使一次点击迟到地触发两次，也不会一下子完成「点击、确认」。放在 guard 之前，被拒绝的点击不占用防抖窗口
+    if (armed && age < CONFIRM_MIN_MS) return
     if (!this.guard()) return
-    if (this.armed !== kind) {
+    if (!armed) {
       clearTimeout(this.armTimer)
       this.armed = kind
       this.armedAt = Date.now()
@@ -196,19 +220,19 @@ export default {
       this.render()
       return
     }
-    // 防抖之外再加一道：即使一次点击迟到地触发两次，也不会一下子完成「点击、确认」
-    if (Date.now() - this.armedAt < CONFIRM_MIN_MS) return
     clearTimeout(this.armTimer)
     this.armed = ''
     const record = kind === 'reset' ? resetGame(this.record) : newMatch(this.settings.rule)
     // 写入成功才回计分页；失败时留在本页，版本号后显示 S2。等待写入期间已算「正在离开」，其他操作一律忽略
     this.leaving = true
+    this.saving = true
     this.store.saveMatch(record).then((ok) => {
+      this.saving = false
       if (ok) {
-        router.back()
+        if (!this.destroyed) router.back()
       } else {
         this.leaving = false
-        this.render()
+        if (!this.destroyed) this.render()
       }
     })
   },
@@ -312,6 +336,7 @@ export default {
   border-radius: 12px;
   background-color: #333333;
   flex-direction: row;
+  align-items: center;
   justify-content: flex-start;
 }
 
