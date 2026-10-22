@@ -22,7 +22,7 @@
 | `npm run build` | 生成调试包 `dist/com.curain.badminton.debug.<版本>.rpk` |
 | `npm run release` | 生成发布包（需要 `sign/` 下的证书，见下文） |
 | `npm run icon` | 重新生成应用图标 |
-| `npm run emu:create` | 创建手环10 尺寸（212×520）的模拟器，只需一次 |
+| `npm run emu:create` | 创建手环10 尺寸（212×520）的模拟器，只需一次；本地缺 `vela-watch-5.0` 镜像时会自动下载 |
 | `npm run emu:start` | 启动模拟器并保持运行，放在单独一个终端里 |
 | `npm run emu:install` | 重新构建并把调试包装进正在运行的模拟器、重启应用，每次改完代码都执行 |
 | `npm start` | 官方的 `aiot start --watch`，在这个模拟器镜像上不稳定，见下文，不推荐 |
@@ -31,8 +31,8 @@
 
 模拟器只用来检查布局和逻辑，振动、常亮、耗电、圆角等仍然要以真机为准。
 
-1. 下载模拟器 SDK 和系统镜像（只需一次）：`npx aiot initEmulatorEnv`，选 `vela-watch-5.0`。
-2. 创建手环10 尺寸的模拟器（只需一次）：`npm run emu:create`，会得到名为 `Vela_Band10` 的 212×520 模拟器。已经存在时会直接跳过，不会覆盖。
+1. 下载模拟器 SDK（只需一次）：`npx aiot initEmulatorEnv`。它没有选项，下载的是模拟器内核、皮肤等资源和默认的 `vela-miwear-watch-5.0` 镜像，不包含本项目用的 `vela-watch-5.0` 镜像。
+2. 创建手环10 尺寸的模拟器（只需一次）：`npm run emu:create`，会得到名为 `Vela_Band10` 的 212×520 模拟器。本地还没有 `vela-watch-5.0` 镜像时，这条命令会先自动下载它（约 210 MB，只下这一个镜像，终端里有进度条）；已经存在同名模拟器时直接跳过，不会覆盖。
 3. 在一个单独的终端里运行 `npm run emu:start`，等模拟器窗口出现并进入表盘，这个终端保持开着。
 4. 在另一个终端里运行 `npm run emu:install`，它会构建、安装并启动应用。之后每次改完代码重新执行这条命令即可。
 
@@ -40,7 +40,9 @@
 
 - **为什么不用 `aiot createVVD`：** 它只有选 miwear 镜像时才会问宽高，选 `vela-watch-5.0` 时固定是 466×466，得不到手环10 的尺寸。`emu:create` 直接调用工具包的接口，参数是 212×520、密度 320、`pill-shaped`、`band`、`arm`。
 - **为什么不用 `npm start`：** 它会编译、安装并启动应用，然后因为工具包只等 8 秒，而这个镜像（`vela-watch-5.0`）启动应用要约 10.5 秒，进程报错退出，热更新撑不住。所以改成构建后用工具包自带的 adb 重装。
-- **`initEmulatorEnv` 卡住不动：** 这台网络上 SDK 的下载主机 `vela-ide.cnbj3-fusion.mi-fds.com` 会在 TLS 握手时被断开。同样的文件在 `https://cnbj3-fusion.fds.api.xiaomi.com/vela-ide/` 下面，路径和原主机一致（先看 `versions.json` 里的版本号），可以手动下载 zip，解压到 `~/.vela/sdk` 下对应的子目录（`emulator/`、`system-images/vela-watch-5.0/`、`skins/`、`qa/`、`modem_simulator/`）。
+- **下载卡住或连不上：** 这台网络上 SDK 的下载主机 `vela-ide.cnbj3-fusion.mi-fds.com` 会在 TLS 握手时被断开，`initEmulatorEnv` 会一直转圈。同样的文件在备用主机 `https://cnbj3-fusion.fds.api.xiaomi.com/vela-ide/` 下面，路径和原主机一致，可以手动下载后解压。
+  - `vela-watch-5.0` 镜像：`emu:create` 会先探测下载地址，连不上时直接报错并打印下面的步骤。下载 `https://cnbj3-fusion.fds.api.xiaomi.com/vela-ide/system-images/vela-watch-5.0/20250716/vela-watch-5.0.zip`，解压到 `~/.vela/sdk/system-images/vela-watch-5.0/`，使 `nuttx`、`vela_system.bin`、`vela_data.bin`、`coredump.core`、`advancedFeatures.ini` 直接放在这个目录下（不要多套一层文件夹），再重新运行 `npm run emu:create`。
+  - `initEmulatorEnv` 的其余部分（模拟器内核 `emulator`、`skins`、`qa`、`modem_simulator`）同理：版本号以 `node_modules/@aiot-toolkit/emulator/lib/emulatorutil/constants.js` 里的 `EmulatorEnvVersion` 为准（备用主机上的 `versions.json` 是旧版，不要参考），解压到 `~/.vela/sdk/<部分名>/`。
 - **更多页版本号显示 `v1.0.0 · K`：** 模拟器镜像里没有 `system.brightness`，所以屏幕常亮开关读取失败，错误码 K 是预期现象。真机上不应该出现。
 
 ## 安装到手环（AstroBox）
