@@ -1513,6 +1513,7 @@ export default {
   store: null,
   device: null,
   loaded: false,
+  reloadOnShow: true, // 下次 onShow 时是否重新读取存储
   tapAt: 0,
   backAt: 0,
   bannerTimer: 0,
@@ -1522,9 +1523,14 @@ export default {
     this.device = createDevice(vibrator, brightness)
   },
 
-  // 首次显示和从更多页返回时都会触发：重新读取，更多页可能改过记录或设置
+  // 只在第一次显示和从更多页回来时重新读取。息屏再亮屏时内存里的状态才是最新的（写入可能失败过），不能用存储覆盖
   onShow() {
-    this.load()
+    if (this.reloadOnShow) {
+      this.reloadOnShow = false
+      this.load()
+    } else if (this.settings) {
+      this.device.keepScreenOn(this.settings.keepOn)
+    }
   },
 
   onHide() {
@@ -1547,10 +1553,14 @@ export default {
 
   // 读取失败时保留内存里的状态；只有第一次加载就失败时才开新比赛，避免一次读失败把进行中的比赛清零
   load() {
+    const before = this.record
     Promise.all([this.store.loadSettings(), this.store.loadMatch()]).then(([s, m]) => {
       if (s.ok || !this.settings) this.settings = s.settings
-      if (m.ok) this.record = m.record || newMatch(this.settings.rule)
-      else if (!this.record) this.record = newMatch(this.settings.rule)
+      // 读取期间如果又计了分，内存里的记录更新，不能被读回来的旧记录覆盖
+      if (this.record === before) {
+        if (m.ok) this.record = m.record || newMatch(this.settings.rule)
+        else if (!this.record) this.record = newMatch(this.settings.rule)
+      }
       this.loaded = true
       this.render()
       this.device.keepScreenOn(this.settings.keepOn)
@@ -1654,6 +1664,7 @@ export default {
 
   // 两页各自打包，不能共享模块变量，错误码通过路由参数带过去
   openMore() {
+    this.reloadOnShow = true // 更多页可能改过记录或设置，回来时重新读取
     router.push({
       uri: '/pages/more',
       params: { err: this.store.lastError() || this.device.lastError() },
@@ -2054,13 +2065,15 @@ export default {
     this.keepOnCls = this.settings.keepOn ? 'switch switch-on' : 'switch'
     const resetArmed = this.armed === 'reset'
     this.resetCls = resetArmed ? 'btn btn-armed' : 'btn'
-    this.resetTextCls = resetArmed ? 'btn-text btn-text-armed' : 'btn-text'
+    // 没读到比赛记录时「本局清零」不可用，文字变暗
+    this.resetTextCls = resetArmed ? 'btn-text btn-text-armed' : this.matchOk ? 'btn-text' : 'btn-text btn-text-off'
     this.resetText = resetArmed ? '再点一次确认' : '本局清零'
     const newArmed = this.armed === 'new'
     this.newCls = newArmed ? 'btn btn-armed' : 'btn'
     this.newTextCls = newArmed ? 'btn-text btn-text-armed' : 'btn-text'
     this.newText = newArmed ? '再点一次确认' : '新比赛'
-    const code = this.err || this.store.lastError()
+    // 本页自己的错误优先：它能解释为什么显示的是默认设置
+    const code = this.store.lastError() || this.err
     this.versionText = code ? this.version + ' · ' + code : this.version
   },
 
@@ -2069,27 +2082,32 @@ export default {
     rule = Number(rule)
     if (!this.loaded || !isRule(rule) || rule === this.settings.rule) return
     this.settings = withSetting(this.settings, 'rule', rule)
-    this.store.saveSettings(this.settings)
+    this.saveSettings()
     // 比赛记录没读到时只改设置，不能用内存里的空记录覆盖存储里的比赛
     const record = this.matchOk ? setRule(this.record, rule) : this.record
     if (record !== this.record) {
       this.record = record
-      this.store.saveMatch(record)
+      this.store.saveMatch(record).then(() => this.render())
     }
     this.render()
+  },
+
+  // 保存设置；写入结束后再刷新一次，让写入失败的错误码显示出来
+  saveSettings() {
+    this.store.saveSettings(this.settings).then(() => this.render())
   },
 
   toggleVibrate() {
     if (!this.loaded) return
     this.settings = withSetting(this.settings, 'vibrate', !this.settings.vibrate)
-    this.store.saveSettings(this.settings)
+    this.saveSettings()
     this.render()
   },
 
   toggleKeepOn() {
     if (!this.loaded) return
     this.settings = withSetting(this.settings, 'keepOn', !this.settings.keepOn)
-    this.store.saveSettings(this.settings)
+    this.saveSettings()
     this.render()
   },
 
@@ -2117,7 +2135,11 @@ export default {
     }
     this.armed = ''
     const record = kind === 'reset' ? resetGame(this.record) : newMatch(this.settings.rule)
-    this.store.saveMatch(record).then(() => router.back())
+    // 写入成功才回计分页；失败时留在本页，版本号后显示 S2
+    this.store.saveMatch(record).then((ok) => {
+      if (ok) router.back()
+      else this.render()
+    })
   },
 
   goBack() {
@@ -2245,6 +2267,10 @@ export default {
 
 .btn-text-armed {
   color: #ffd5d6;
+}
+
+.btn-text-off {
+  color: #555555;
 }
 
 .version {
