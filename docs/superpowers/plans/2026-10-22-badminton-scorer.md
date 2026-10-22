@@ -42,6 +42,9 @@
 4. **圆角不加同色边框：** miSmash 已在手环10 上实测 `border-radius` 单独生效。若真机圆角显示成直角，再按设计第 2 节补同色边框。
 5. **顶栏文字去掉数字两侧空格：** 写作「第2局 · 21分」，为了在 126px 宽的顶栏里和「更多」按钮放在一起。
 6. **点击防抖：** 计分卡片加 250ms 防抖，防止真机上一次点击触发两次（做法来自 miSmash）。
+7. **读取结果带 ok 标志：** `loadMatch()` 返回 `{ ok, record }`，`loadSettings()` 返回 `{ ok, settings }`（Task 6 评审后加入）。`ok` 为 false 表示这次读失败或超时：
+   - 计分页保留内存里的比赛；只有第一次加载就失败时才开新比赛。
+   - 更多页不改写存储里的比赛。
 
 ## 文件结构
 
@@ -1197,7 +1200,7 @@ export PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH"
 npm test
 ```
 
-Expected: `# pass 52`（加上 store 的 10 个），`# fail 0`，整体用时在 1 秒以内。如果用时接近 1.5 秒，说明有计时器没被清掉。
+Expected: `# pass 52`（加上 store 的 10 个；评审后 store 改为返回 `{ ok, record }` / `{ ok, settings }` 并补到 17 个测试，合计 59），`# fail 0`，整体用时在 1 秒以内。如果用时接近 1.5 秒，说明有计时器没被清掉。
 
 - [ ] **Step 5: Commit**
 
@@ -1382,7 +1385,7 @@ export PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH"
 npm test
 ```
 
-Expected: `# pass 60`（加上 device 的 8 个），`# fail 0`。
+Expected: `# pass 67`（加上 device 的 8 个），`# fail 0`。
 
 - [ ] **Step 5: Commit**
 
@@ -1542,13 +1545,15 @@ export default {
     return true
   },
 
+  // 读取失败时保留内存里的状态；只有第一次加载就失败时才开新比赛，避免一次读失败把进行中的比赛清零
   load() {
-    Promise.all([this.store.loadSettings(), this.store.loadMatch()]).then(([settings, record]) => {
-      this.settings = settings
-      this.record = record || newMatch(settings.rule)
+    Promise.all([this.store.loadSettings(), this.store.loadMatch()]).then(([s, m]) => {
+      if (s.ok || !this.settings) this.settings = s.settings
+      if (m.ok) this.record = m.record || newMatch(this.settings.rule)
+      else if (!this.record) this.record = newMatch(this.settings.rule)
       this.loaded = true
       this.render()
-      this.device.keepScreenOn(settings.keepOn)
+      this.device.keepScreenOn(this.settings.keepOn)
     })
   },
 
@@ -1908,7 +1913,7 @@ export PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH"
 npm run build && npm test
 ```
 
-Expected: 构建成功、生成 rpk；单元测试仍是 `# pass 60`。如果构建报 `missing feature`，把提示的模块加进 manifest。
+Expected: 构建成功、生成 rpk；单元测试仍是 `# pass 67`。如果构建报 `missing feature`，把提示的模块加进 manifest。
 
 - [ ] **Step 3: Commit**
 
@@ -2012,6 +2017,7 @@ export default {
   store: null,
   settings: null,
   record: null,
+  matchOk: false, // 比赛记录是否读取成功；没读到时不能改写存储里的比赛
   loaded: false,
   armed: '', // 等待二次确认的按钮：'' | 'reset' | 'new'
   armTimer: 0,
@@ -2024,9 +2030,10 @@ export default {
     } catch (e) {
       this.version = ''
     }
-    Promise.all([this.store.loadSettings(), this.store.loadMatch()]).then(([settings, record]) => {
-      this.settings = settings
-      this.record = record || newMatch(settings.rule)
+    Promise.all([this.store.loadSettings(), this.store.loadMatch()]).then(([s, m]) => {
+      this.settings = s.settings
+      this.matchOk = m.ok
+      this.record = m.record || newMatch(s.settings.rule)
       this.loaded = true
       this.render()
     })
@@ -2042,7 +2049,7 @@ export default {
     this.rule21TextCls = on21 ? 'seg-text seg-text-on' : 'seg-text'
     this.rule15Cls = on21 ? 'seg' : 'seg seg-on'
     this.rule15TextCls = on21 ? 'seg-text' : 'seg-text seg-text-on'
-    this.ruleHint = this.settings.rule !== this.record.rule ? '新比赛生效' : ''
+    this.ruleHint = this.matchOk && this.settings.rule !== this.record.rule ? '新比赛生效' : ''
     this.vibrateCls = this.settings.vibrate ? 'switch switch-on' : 'switch'
     this.keepOnCls = this.settings.keepOn ? 'switch switch-on' : 'switch'
     const resetArmed = this.armed === 'reset'
@@ -2063,7 +2070,8 @@ export default {
     if (!this.loaded || !isRule(rule) || rule === this.settings.rule) return
     this.settings = withSetting(this.settings, 'rule', rule)
     this.store.saveSettings(this.settings)
-    const record = setRule(this.record, rule)
+    // 比赛记录没读到时只改设置，不能用内存里的空记录覆盖存储里的比赛
+    const record = this.matchOk ? setRule(this.record, rule) : this.record
     if (record !== this.record) {
       this.record = record
       this.store.saveMatch(record)
@@ -2095,7 +2103,8 @@ export default {
 
   // 第一次点击进入待确认状态，3 秒内再点才执行；执行后存盘并回到计分页
   confirm(kind) {
-    if (!this.loaded) return
+    // 没读到比赛记录时不能清零：清零结果会覆盖存储里的比赛（版本号后会显示 S1）
+    if (!this.loaded || (kind === 'reset' && !this.matchOk)) return
     clearTimeout(this.armTimer)
     if (this.armed !== kind) {
       this.armed = kind
@@ -2253,7 +2262,7 @@ export PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH"
 npm run build && npm test
 ```
 
-Expected: 构建成功；单元测试 `# pass 60`。
+Expected: 构建成功；单元测试 `# pass 67`。
 
 - [ ] **Step 3: Commit**
 
@@ -2426,7 +2435,7 @@ export PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH"
 npm test && npm run build && ls -l dist/
 ```
 
-Expected: 测试 `# pass 60`；`dist/com.curain.badminton.debug.1.0.0.rpk` 存在。
+Expected: 测试 `# pass 67`；`dist/com.curain.badminton.debug.1.0.0.rpk` 存在。
 
 - [ ] **Step 4: Commit**
 
