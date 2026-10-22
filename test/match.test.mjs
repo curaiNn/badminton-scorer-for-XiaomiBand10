@@ -48,6 +48,12 @@ test('gameOver 时得分无效', () => {
   assert.equal(result.record, over)
 })
 
+test('matchOver 时得分和下一局都无效', () => {
+  const over = rec(21, R(21) + R(21), 1)
+  assert.deepEqual(addPoint(over, 'R'), { record: over, event: null })
+  assert.equal(nextGame(over), over)
+})
+
 test('nextGame 只在 gameOver 时生效', () => {
   const next = nextGame(rec(21, R(21), 0))
   assert.equal(next.acked, 1)
@@ -156,12 +162,22 @@ test('normalize 拒绝坏数据', () => {
     { v: 1, rule: '21', pts: '', acked: 0 },
     { v: 1, rule: 11, pts: '', acked: 0 },
     { v: 1, rule: 21, pts: 'RXB', acked: 0 },
+    // 超长：最长的合法记录约 177 个字符，这条主要防止超大坏数据拖慢校验
     { v: 1, rule: 21, pts: 'RB'.repeat(101), acked: 0 },
     { v: 1, rule: 21, pts: '', acked: -1 },
     { v: 1, rule: 21, pts: '', acked: 1.5 },
     { v: 1, rule: 21, pts: 'R', acked: 1 },
     { v: 1, rule: 21, pts: R(21) + R(21) + 'B', acked: 1 },
     { v: 1, rule: 21, pts: R(21) + 'RR', acked: 0 },
+    { v: 1, rule: 21, pts: R(21), acked: 0.5 }, // 只有整数检查能拒绝它
+    { v: 1, rule: 21, pts: ['R'], acked: 0 }, // pts 必须是字符串
+    { v: 1, rule: 21, pts: R(21) + R(21), acked: 2 }, // 比赛已结束却把所有局都标成已确认，正常操作到不了
   ]
   for (const raw of bad) assert.equal(normalize(raw), null, JSON.stringify(raw))
+})
+
+test('normalize 只保留记录字段', () => {
+  const result = normalize({ v: 1, rule: 21, pts: 'R', acked: 0, extra: 1 })
+  assert.deepEqual(result, rec(21, 'R', 0))
+  assert.equal('extra' in result, false)
 })

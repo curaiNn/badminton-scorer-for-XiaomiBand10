@@ -1,6 +1,6 @@
 // 比赛记录的操作：纯函数，输入旧记录、返回新记录，不修改入参。
 // 记录格式：{ v: 1, rule: 21 | 15, pts: 'RB…', acked: 已点过「下一局」的局数 }
-import { RED, BLUE, RULES, isRule, isGameWon, deriveMatch } from './rules.js'
+import { RED, BLUE, RULES, isRule, deriveMatch } from './rules.js'
 
 export const RECORD_VERSION = 1
 const MAX_PTS = 200
@@ -53,30 +53,10 @@ export function nextGame(record) {
 
 // 只保留前 acked 局的得分：进行中的局，或刚结束、还没点「下一局」的局回到 0:0
 export function resetGame(record) {
-  const keep = lengthOfGames(record, record.acked)
+  const games = deriveMatch(record).games
+  let keep = 0
+  for (let i = 0; i < record.acked; i++) keep += games[i].red + games[i].blue
   return make(record.rule, record.pts.slice(0, keep), record.acked)
-}
-
-// 前 n 个已结束的局在 pts 中占的长度
-function lengthOfGames(record, n) {
-  if (n === 0) return 0
-  let red = 0
-  let blue = 0
-  let done = 0
-  for (let i = 0; i < record.pts.length; i++) {
-    const side = record.pts[i]
-    if (side === RED) red++
-    else blue++
-    const own = side === RED ? red : blue
-    const other = side === RED ? blue : red
-    if (isGameWon(own, other, record.rule)) {
-      done++
-      if (done === n) return i + 1
-      red = 0
-      blue = 0
-    }
-  }
-  return record.pts.length
 }
 
 // 只有还没开赛时才改本场赛制；否则原样返回，由设置在下一场生效
@@ -94,5 +74,7 @@ export function normalize(raw) {
   const record = make(raw.rule, raw.pts, raw.acked)
   const s = deriveMatch(record)
   if (!s.valid || raw.acked > s.completed) return null
+  // 比赛结束时最后一局不会被「下一局」确认，acked 一定小于已结束局数
+  if (s.matchWinner && raw.acked >= s.completed) return null
   return record
 }
