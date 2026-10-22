@@ -2,7 +2,7 @@
 
 装在小米手环10 上的羽毛球比赛计分器，是一个 Xiaomi Vela JS 快应用（`.rpk`）。红蓝两方点一下加一分，底部撤销；自动提示发球方和发球区；三局两胜，21 分制和 15 分制可选；有振动反馈，比赛时可以保持屏幕常亮；每得一分都会存盘，退出后重新打开能接着打。
 
-已在小米手环10 NFC 版（国行，固件 3.1.28）上用 AstroBox 2.2.0 安装成功。
+已在小米手环10 NFC 版（国行，固件 3.1.28）上用 AstroBox 2.2.0 安装成功。安装包在 [Releases 页面](https://github.com/curaiNn/badminton-scorer-for-XiaomiBand10/releases/latest) 下载，安装步骤见「[安装到手环](#安装到手环)」。
 
 > 这是个人项目，和小米公司无关。小米没有给个人开发者开放装机渠道，下文的安装方法用第三方工具 AstroBox 侧载，风险自负。
 >
@@ -51,7 +51,7 @@
 
 - 小米手环10。我用的是 NFC 版国行，手机是安卓，装的小米运动健康。
 - 一台有蓝牙的电脑。下面以 Mac 为例；AstroBox 也有 Windows、Linux 和安卓版本，步骤类似，我没有测过。
-- 安装包 `.rpk`：按下文「从源码构建」生成，在 `dist/` 目录下。
+- 安装包 `.rpk`：到 [Releases 页面](https://github.com/curaiNn/badminton-scorer-for-XiaomiBand10/releases/latest) 下载最新版的 `com.curain.badminton.debug.<版本>.rpk`。想自己改代码的话，按下文「从源码构建」生成，在 `dist/` 目录下。
 
 ### 1. 安装 AstroBox
 
@@ -103,7 +103,7 @@ Mac 上如果报 `RFCOMM channel disconnected`，到 Mac 的蓝牙设置里忽�
 
 ### 6. 安装
 
-把 `.rpk` 拖进 AstroBox 窗口。装好后，安装队列下面的历史记录多一条，手环的应用列表里出现「羽毛球计分」（上红下蓝的圆形图标，中间一个白色羽毛球）。
+把下载或构建好的 `.rpk` 拖进 AstroBox 窗口。装好后，安装队列下面的历史记录多一条，手环的应用列表里出现「羽毛球计分」（上红下蓝的圆形图标，中间一个白色羽毛球）。
 
 ![AstroBox 安装完成：已连接，历史记录里有一条](docs/images/astrobox-installed.png)
 
