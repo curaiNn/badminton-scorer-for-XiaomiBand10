@@ -11,7 +11,10 @@
     "build": "aiot build",
     "release": "aiot release",
     "test": "node --test --disable-warning=MODULE_TYPELESS_PACKAGE_JSON \"test/*.test.mjs\"",
-    "icon": "node tools/gen-icon.mjs"
+    "icon": "node tools/gen-icon.mjs",
+    "emu:create": "node tools/emulator/create-vvd.cjs",
+    "emu:start": "node tools/emulator/start.cjs",
+    "emu:install": "bash tools/emulator/install.sh build"
   },
   "devDependencies": {
     "@aiot-toolkit/jsc": "^1.0.3",
