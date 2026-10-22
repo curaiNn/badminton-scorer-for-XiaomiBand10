@@ -39,7 +39,7 @@
     </div>
 
     <!-- 一局结束 / 比赛结束：替换卡片区域，防止误触计分 -->
-    <div class="over" if="{{ phase !== 'playing' }}">
+    <div class="over" if="{{ phase === 'gameOver' || phase === 'matchOver' }}">
       <text class="{{ overTitleCls }}">{{ overTitle }}</text>
       <div class="over-score">
         <text class="over-num text-red">{{ overRed }}</text>
@@ -65,20 +65,21 @@ import vibrator from '@system.vibrator'
 import brightness from '@system.brightness'
 import { RED, BLUE, deriveMatch } from '../../common/rules.js'
 import { newMatch, addPoint, undo, nextGame } from '../../common/match.js'
-import { createStore } from '../../common/store.js'
+import { createStore, DEFAULT_SETTINGS } from '../../common/store.js'
 import { createDevice } from '../../common/device.js'
 
 const RED_CARD = 'card card-red'
 const BLUE_CARD = 'card card-blue card-gap'
 const COURT_TEXT = { right: '右区发球', left: '左区发球' }
 const SIDE_NAME = { R: '红方', B: '蓝方' }
-const TAP_GUARD_MS = 250 // 防止真机一次点击触发两次，计分、撤销、提示层按钮的点击都适用
+const TAP_GUARD_MS = 250 // 防止真机一次点击触发两次，计分、撤销、提示层按钮、更多按钮的点击都适用
+const OVER_GUARD_MS = 1000 // 一局或比赛刚结束时，提示层按钮正好出现在最后一次点击的位置，这段时间内忽略点击
 const EXIT_WINDOW_MS = 2000 // 两次右滑之间的间隔上限
 const SWAP_BANNER_MS = 3000
 
 export default {
   private: {
-    phase: 'playing',
+    phase: 'loading', // 第一次读取完成前，卡片和提示层都不渲染
     topLine: '',
     banner: '',
     bannerCls: 'banner',
@@ -105,6 +106,7 @@ export default {
   store: null,
   device: null,
   loaded: false,
+  visible: true, // 页面是否在前台。创建时就在前台，不依赖第一次 onShow 是否触发；只有 onHide / onDestroy 会把它置为 false
   reloadOnShow: false, // 下次 onShow 时是否重新读取存储（首次加载在 onInit 里）
   tapAt: 0,
   backAt: 0,
@@ -118,6 +120,7 @@ export default {
 
   // 从更多页回来时重新读取（更多页可能改过记录或设置）；息屏再亮屏时内存里的状态才是最新的（写入可能失败过），不能用存储覆盖
   onShow() {
+    this.visible = true
     if (this.reloadOnShow) {
       this.reloadOnShow = false
       this.load()
@@ -127,10 +130,12 @@ export default {
   },
 
   onHide() {
+    this.visible = false
     this.device.keepScreenOn(false)
   },
 
   onDestroy() {
+    this.visible = false
     clearTimeout(this.bannerTimer)
     this.device.keepScreenOn(false)
   },
@@ -147,17 +152,27 @@ export default {
   // 读取失败时保留内存里的状态；只有第一次加载就失败时才开新比赛，避免一次读失败把进行中的比赛清零
   load() {
     const before = this.record
-    Promise.all([this.store.loadSettings(), this.store.loadMatch()]).then(([s, m]) => {
-      if (s.ok || !this.settings) this.settings = s.settings
-      // 读取期间如果又计了分，内存里的记录更新，不能被读回来的旧记录覆盖
-      if (this.record === before) {
-        if (m.ok) this.record = m.record || newMatch(this.settings.rule)
-        else if (!this.record) this.record = newMatch(this.settings.rule)
-      }
-      this.loaded = true
-      this.render()
-      this.device.keepScreenOn(this.settings.keepOn)
-    })
+    Promise.all([this.store.loadSettings(), this.store.loadMatch()])
+      .then(([s, m]) => {
+        if (s.ok || !this.settings) this.settings = s.settings
+        // 读取期间如果又计了分，内存里的记录更新，不能被读回来的旧记录覆盖
+        if (this.record === before) {
+          if (m.ok) this.record = m.record || newMatch(this.settings.rule)
+          else if (!this.record) this.record = newMatch(this.settings.rule)
+        }
+        this.loaded = true
+        this.render()
+        // 读取期间页面可能已经切到后台，这时不能再打开常亮
+        if (this.visible) this.device.keepScreenOn(this.settings.keepOn)
+      })
+      .catch(() => {
+        // 兜底：第一次加载过程中出了意外，用默认设置和新比赛，保证页面能用
+        if (this.loaded) return
+        this.settings = this.settings || Object.assign({}, DEFAULT_SETTINGS)
+        this.record = this.record || newMatch(this.settings.rule)
+        this.loaded = true
+        this.render()
+      })
   },
 
   render() {
@@ -221,6 +236,8 @@ export default {
     const result = addPoint(this.record, side)
     if (!result.event) return
     this.commit(result.record, result.event)
+    // 让 guard() 在接下来的 OVER_GUARD_MS 内都拒绝点击（guard 只看 now - tapAt 是否小于 TAP_GUARD_MS）
+    if (result.event === 'game' || result.event === 'match') this.tapAt = Date.now() + OVER_GUARD_MS - TAP_GUARD_MS
     if (result.event === 'swapEnds') this.showBanner('换边', 'banner banner-swap', SWAP_BANNER_MS)
   },
 
@@ -258,6 +275,7 @@ export default {
   hideBanner() {
     clearTimeout(this.bannerTimer)
     this.banner = ''
+    this.backAt = 0 // 「再滑一次退出」的提示一起收起了，下一次右滑要重新提示，不能直接退出
   },
 
   showBanner(text, cls, ms) {
@@ -271,6 +289,9 @@ export default {
 
   // 两页各自打包，不能共享模块变量，错误码通过路由参数带过去
   openMore() {
+    if (!this.loaded || !this.guard()) return
+    // 离开前再存一次：之前写失败过的话，更多页和回来后的重新读取都能看到内存里的比赛。不等待结果
+    this.store.saveMatch(this.record)
     this.reloadOnShow = true // 更多页可能改过记录或设置，回来时重新读取
     router.push({
       uri: '/pages/more',
