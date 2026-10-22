@@ -20,6 +20,9 @@
       </div>
     </div>
 
+    <!-- 加载中：占住卡片区域，撤销键不跳动 -->
+    <div class="cards" if="{{ phase === 'loading' }}"></div>
+
     <!-- 比赛中：红蓝两张卡片，整张卡片都是点击区域 -->
     <div class="cards" if="{{ phase === 'playing' }}">
       <div class="{{ redCls }}" ontouchstart="pressRed" ontouchend="releaseCards" onclick="tapRed">
@@ -106,6 +109,7 @@ export default {
   store: null,
   device: null,
   loaded: false,
+  loading: false, // 正在读取存储。读取期间不进更多页，避免进更多页前的存盘覆盖更多页刚做的修改
   visible: true, // 页面是否在前台。创建时就在前台，不依赖第一次 onShow 是否触发；只有 onHide / onDestroy 会把它置为 false
   reloadOnShow: false, // 下次 onShow 时是否重新读取存储（首次加载在 onInit 里）
   tapAt: 0,
@@ -152,8 +156,10 @@ export default {
   // 读取失败时保留内存里的状态；只有第一次加载就失败时才开新比赛，避免一次读失败把进行中的比赛清零
   load() {
     const before = this.record
+    this.loading = true
     Promise.all([this.store.loadSettings(), this.store.loadMatch()])
       .then(([s, m]) => {
+        this.loading = false
         if (s.ok || !this.settings) this.settings = s.settings
         // 读取期间如果又计了分，内存里的记录更新，不能被读回来的旧记录覆盖
         if (this.record === before) {
@@ -166,12 +172,14 @@ export default {
         if (this.visible) this.device.keepScreenOn(this.settings.keepOn)
       })
       .catch(() => {
+        this.loading = false
         // 兜底：第一次加载过程中出了意外，用默认设置和新比赛，保证页面能用
         if (this.loaded) return
         this.settings = this.settings || Object.assign({}, DEFAULT_SETTINGS)
         this.record = this.record || newMatch(this.settings.rule)
         this.loaded = true
         this.render()
+        if (this.visible) this.device.keepScreenOn(this.settings.keepOn)
       })
   },
 
@@ -289,7 +297,7 @@ export default {
 
   // 两页各自打包，不能共享模块变量，错误码通过路由参数带过去
   openMore() {
-    if (!this.loaded || !this.guard()) return
+    if (!this.loaded || this.loading || !this.guard()) return
     // 离开前再存一次：之前写失败过的话，更多页和回来后的重新读取都能看到内存里的比赛。不等待结果
     this.store.saveMatch(this.record)
     this.reloadOnShow = true // 更多页可能改过记录或设置，回来时重新读取
