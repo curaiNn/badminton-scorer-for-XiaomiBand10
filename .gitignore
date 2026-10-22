@@ -1,0 +1,10 @@
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+
+# 发布签名证书（私钥不能进仓库，另行备份）
+sign/
+
+# 系统文件
+.DS_Store
