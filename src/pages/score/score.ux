@@ -112,6 +112,10 @@ export default {
   loading: false, // 正在读取存储。读取期间不进更多页，避免进更多页前的存盘覆盖更多页刚做的修改
   visible: true, // 页面是否在前台。创建时就在前台，不依赖第一次 onShow 是否触发；只有 onHide / onDestroy 会把它置为 false
   reloadOnShow: false, // 下次 onShow 时是否重新读取存储（首次加载在 onInit 里）
+  persistedJson: '', // 已知存储里的比赛记录（JSON）。重新读取时读到的和它不同，才说明更多页改过比赛
+  dirty: false, // 最近一次写入失败：存储里的比赛比内存旧，退到后台时补存
+  saveSeq: 0, // 存盘序号，每次存盘加一
+  knownSeq: 0, // persistedJson 对应的存盘序号。先发出的写入晚回来时，不能把它改回旧记录
   tapAt: 0,
   backAt: 0,
   bannerTimer: 0,
@@ -135,7 +139,9 @@ export default {
 
   onHide() {
     this.visible = false
+    this.hideBanner() // 后台时计时器冻结，「再滑一次退出」之类的提示会超过时限还留着
     this.device.keepScreenOn(false)
+    if (this.dirty) this.save() // 上次写入失败，退到后台前再补存一次。不等待结果
   },
 
   onDestroy() {
@@ -158,13 +164,23 @@ export default {
     const before = this.record
     this.loading = true
     Promise.all([this.store.loadSettings(), this.store.loadMatch()])
+      // 冷启动时比赛记录读取失败，再读一次（只重试一次），仍然失败才开新比赛
+      .then(([s, m]) => (!before && !m.ok ? this.store.loadMatch().then((m2) => [s, m2]) : [s, m]))
       .then(([s, m]) => {
         this.loading = false
         if (s.ok || !this.settings) this.settings = s.settings
         // 读取期间如果又计了分，内存里的记录更新，不能被读回来的旧记录覆盖
         if (this.record === before) {
-          if (m.ok) this.record = m.record || newMatch(this.settings.rule)
-          else if (!this.record) this.record = newMatch(this.settings.rule)
+          // 重新读取时，读到的和已知存储里的不同，才说明更多页改过比赛；
+          // 其余情况（读失败、没有记录、和已知的一样）保留内存，内存里可能有还没存进去的得分
+          if (m.ok && m.record && (!before || JSON.stringify(m.record) !== this.persistedJson)) {
+            this.record = m.record
+            this.persistedJson = JSON.stringify(m.record)
+            this.knownSeq = this.saveSeq // 之前发出、还没回来的写入不再改 persistedJson
+            this.dirty = false
+          } else if (!before) {
+            this.record = newMatch(this.settings.rule)
+          }
         }
         this.loaded = true
         this.render()
@@ -276,8 +292,23 @@ export default {
   commit(record, event) {
     this.record = record
     this.render()
-    this.store.saveMatch(record)
+    this.save()
     if (event) this.device.buzz(event, this.settings.vibrate)
+  },
+
+  // 存盘当前记录。写入失败时继续用内存，下次写入成功即补上（设计 5.5）
+  save() {
+    const record = this.record
+    const seq = ++this.saveSeq
+    this.store.saveMatch(record).then((ok) => {
+      // 以后发出的写入已经有了结果（或已从存储重新读取），这次的结果作废
+      if (seq <= this.knownSeq) return
+      if (ok) {
+        this.knownSeq = seq
+        this.persistedJson = JSON.stringify(record)
+      }
+      if (seq === this.saveSeq) this.dirty = !ok
+    })
   },
 
   hideBanner() {
@@ -299,7 +330,7 @@ export default {
   openMore() {
     if (!this.loaded || this.loading || !this.guard()) return
     // 离开前再存一次：之前写失败过的话，更多页和回来后的重新读取都能看到内存里的比赛。不等待结果
-    this.store.saveMatch(this.record)
+    this.save()
     this.reloadOnShow = true // 更多页可能改过记录或设置，回来时重新读取
     router.push({
       uri: '/pages/more',
