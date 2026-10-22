@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "小米手环10 羽毛球计分（Xiaomi Vela JS 应用）",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "engines": {
     "node": ">=22"
   },

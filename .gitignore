@@ -6,5 +6,8 @@ build/
 # 发布签名证书（私钥不能进仓库，另行备份）
 sign/
 
+# 手环连接凭据（AstroBox 用的 AuthKey，不能进仓库）
+astrobox-authkey.txt
+
 # 系统文件
 .DS_Store
