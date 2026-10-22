@@ -1,12 +1,224 @@
 <template>
   <div class="page">
-    <text class="hello">更多</text>
+    <text class="title">更多</text>
+
+    <text class="label">计分规则</text>
+    <div class="segs">
+      <div class="{{ rule21Cls }}" onclick="pickRule(21)">
+        <text class="{{ rule21TextCls }}">21 分</text>
+      </div>
+      <div class="{{ rule15Cls }}" onclick="pickRule(15)">
+        <text class="{{ rule15TextCls }}">15 分</text>
+      </div>
+    </div>
+    <text class="hint">{{ ruleHint }}</text>
+
+    <div class="row" onclick="toggleVibrate">
+      <text class="row-text">振动反馈</text>
+      <div class="{{ vibrateCls }}">
+        <div class="knob"></div>
+      </div>
+    </div>
+    <div class="row" onclick="toggleKeepOn">
+      <text class="row-text">屏幕常亮</text>
+      <div class="{{ keepOnCls }}">
+        <div class="knob"></div>
+      </div>
+    </div>
+
+    <div class="{{ resetCls }}" onclick="tapReset">
+      <text class="{{ resetTextCls }}">{{ resetText }}</text>
+    </div>
+    <div class="{{ newCls }}" onclick="tapNew">
+      <text class="{{ newTextCls }}">{{ newText }}</text>
+    </div>
+    <div class="btn" onclick="goBack">
+      <text class="btn-text">返回计分</text>
+    </div>
+
+    <text class="version">{{ versionText }}</text>
   </div>
 </template>
 
 <script>
+import router from '@system.router'
+import storage from '@system.storage'
+import app from '@system.app'
+import { isRule } from '../../common/rules.js'
+import { newMatch, resetGame, setRule } from '../../common/match.js'
+import { createStore } from '../../common/store.js'
+
+const CONFIRM_MS = 3000 // 二次确认的等待时间
+const CONFIRM_MIN_MS = 400 // 武装后至少过这么久，第二次点击才算确认
+const TAP_GUARD_MS = 250 // 真机上一次点击偶尔触发两次：所有点击操作共用 250ms 防抖
+
+function withSetting(settings, key, value) {
+  const next = { v: settings.v, rule: settings.rule, vibrate: settings.vibrate, keepOn: settings.keepOn }
+  next[key] = value
+  return next
+}
+
 export default {
-  private: {}
+  // 计分页通过路由参数传来的错误码（参数到达时都是字符串）
+  protected: {
+    err: '',
+  },
+
+  private: {
+    rule21Cls: 'seg seg-on',
+    rule21TextCls: 'seg-text seg-text-on',
+    rule15Cls: 'seg',
+    rule15TextCls: 'seg-text',
+    ruleHint: '',
+    vibrateCls: 'switch switch-on',
+    keepOnCls: 'switch switch-on',
+    resetCls: 'btn',
+    resetTextCls: 'btn-text',
+    resetText: '本局清零',
+    newCls: 'btn',
+    newTextCls: 'btn-text',
+    newText: '新比赛',
+    versionText: '',
+  },
+
+  // 不参与渲染的内部状态
+  store: null,
+  settings: null,
+  record: null,
+  matchOk: false, // 比赛记录是否读取成功；没读到时不能改写存储里的比赛
+  loaded: false,
+  armed: '', // 等待二次确认的按钮：'' | 'reset' | 'new'
+  armTimer: 0,
+  armedAt: 0,
+  tapAt: 0,
+  version: '',
+
+  onInit() {
+    this.store = createStore(storage)
+    try {
+      this.version = 'v' + app.getInfo().versionName
+    } catch (e) {
+      this.version = ''
+    }
+    Promise.all([this.store.loadSettings(), this.store.loadMatch()]).then(([s, m]) => {
+      this.settings = s.settings
+      this.matchOk = m.ok
+      this.record = m.record || newMatch(s.settings.rule)
+      this.loaded = true
+      this.render()
+    })
+  },
+
+  onDestroy() {
+    clearTimeout(this.armTimer)
+  },
+
+  render() {
+    const on21 = this.settings.rule === 21
+    this.rule21Cls = on21 ? 'seg seg-on' : 'seg'
+    this.rule21TextCls = on21 ? 'seg-text seg-text-on' : 'seg-text'
+    this.rule15Cls = on21 ? 'seg' : 'seg seg-on'
+    this.rule15TextCls = on21 ? 'seg-text' : 'seg-text seg-text-on'
+    this.ruleHint = this.matchOk && this.settings.rule !== this.record.rule ? '新比赛生效' : ''
+    this.vibrateCls = this.settings.vibrate ? 'switch switch-on' : 'switch'
+    this.keepOnCls = this.settings.keepOn ? 'switch switch-on' : 'switch'
+    const resetArmed = this.armed === 'reset'
+    this.resetCls = resetArmed ? 'btn btn-armed' : 'btn'
+    // 没读到比赛记录时「本局清零」不可用，文字变暗
+    this.resetTextCls = resetArmed ? 'btn-text btn-text-armed' : this.matchOk ? 'btn-text' : 'btn-text btn-text-off'
+    this.resetText = resetArmed ? '再点一次确认' : '本局清零'
+    const newArmed = this.armed === 'new'
+    this.newCls = newArmed ? 'btn btn-armed' : 'btn'
+    this.newTextCls = newArmed ? 'btn-text btn-text-armed' : 'btn-text'
+    this.newText = newArmed ? '再点一次确认' : '新比赛'
+    // 本页自己的错误优先：它能解释为什么显示的是默认设置
+    const code = this.store.lastError() || this.err
+    this.versionText = code ? this.version + ' · ' + code : this.version
+  },
+
+  // 设置总是保存；本场比赛还没开始时，同时改本场的赛制
+  pickRule(rule) {
+    rule = Number(rule)
+    if (!this.loaded || !isRule(rule) || rule === this.settings.rule) return
+    if (!this.guard()) return
+    this.settings = withSetting(this.settings, 'rule', rule)
+    this.saveSettings()
+    // 比赛记录没读到时只改设置，不能用内存里的空记录覆盖存储里的比赛
+    const record = this.matchOk ? setRule(this.record, rule) : this.record
+    if (record !== this.record) {
+      this.record = record
+      this.store.saveMatch(record).then(() => this.render())
+    }
+    this.render()
+  },
+
+  // 保存设置；写入结束后再刷新一次，让写入失败的错误码显示出来
+  saveSettings() {
+    this.store.saveSettings(this.settings).then(() => this.render())
+  },
+
+  toggleVibrate() {
+    if (!this.loaded || !this.guard()) return
+    this.settings = withSetting(this.settings, 'vibrate', !this.settings.vibrate)
+    this.saveSettings()
+    this.render()
+  },
+
+  toggleKeepOn() {
+    if (!this.loaded || !this.guard()) return
+    this.settings = withSetting(this.settings, 'keepOn', !this.settings.keepOn)
+    this.saveSettings()
+    this.render()
+  },
+
+  tapReset() {
+    this.confirm('reset')
+  },
+
+  tapNew() {
+    this.confirm('new')
+  },
+
+  // 第一次点击进入待确认状态，3 秒内再点才执行；执行后存盘并回到计分页
+  confirm(kind) {
+    // 没读到比赛记录时不能清零：清零结果会覆盖存储里的比赛（版本号后会显示 S1）
+    if (!this.loaded || (kind === 'reset' && !this.matchOk)) return
+    if (!this.guard()) return
+    if (this.armed !== kind) {
+      clearTimeout(this.armTimer)
+      this.armed = kind
+      this.armedAt = Date.now()
+      this.armTimer = setTimeout(() => {
+        this.armed = ''
+        this.render()
+      }, CONFIRM_MS)
+      this.render()
+      return
+    }
+    // 防抖之外再加一道：即使一次点击迟到地触发两次，也不会一下子完成「点击、确认」
+    if (Date.now() - this.armedAt < CONFIRM_MIN_MS) return
+    clearTimeout(this.armTimer)
+    this.armed = ''
+    const record = kind === 'reset' ? resetGame(this.record) : newMatch(this.settings.rule)
+    // 写入成功才回计分页；失败时留在本页，版本号后显示 S2
+    this.store.saveMatch(record).then((ok) => {
+      if (ok) router.back()
+      else this.render()
+    })
+  },
+
+  // 真机上一次点击偶尔触发两次：所有点击操作共用 250ms 防抖
+  guard() {
+    const now = Date.now()
+    if (now - this.tapAt < TAP_GUARD_MS) return false
+    this.tapAt = now
+    return true
+  },
+
+  goBack() {
+    if (!this.guard()) return
+    router.back()
+  },
 }
 </script>
 
@@ -14,13 +226,130 @@ export default {
 .page {
   width: 212px;
   height: 520px;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
+  padding-top: 28px;
+  padding-bottom: 20px;
   background-color: #000000;
 }
 
-.hello {
-  font-size: 20px;
+.title {
+  height: 28px;
+  font-size: 18px;
   color: #eeeeee;
+}
+
+.label {
+  width: 172px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: #8a8a8a;
+}
+
+.segs {
+  width: 172px;
+  height: 40px;
+  margin-top: 6px;
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.seg {
+  width: 82px;
+  height: 40px;
+  border-radius: 20px;
+  background-color: #1f1f1f;
+  justify-content: center;
+  align-items: center;
+}
+
+.seg-on {
+  background-color: #eeeeee;
+}
+
+.seg-text {
+  font-size: 15px;
+  color: #aaaaaa;
+}
+
+.seg-text-on {
+  color: #111111;
+}
+
+.hint {
+  width: 172px;
+  height: 18px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #8a8a8a;
+  text-align: center;
+}
+
+.row {
+  width: 172px;
+  height: 44px;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.row-text {
+  font-size: 15px;
+  color: #eeeeee;
+}
+
+.switch {
+  width: 44px;
+  height: 24px;
+  padding: 3px;
+  border-radius: 12px;
+  background-color: #333333;
+  flex-direction: row;
+  justify-content: flex-start;
+}
+
+.switch-on {
+  background-color: #2f6feb;
+  justify-content: flex-end;
+}
+
+.knob {
+  width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background-color: #ffffff;
+}
+
+.btn {
+  width: 172px;
+  height: 44px;
+  margin-top: 8px;
+  border-radius: 22px;
+  background-color: #1f1f1f;
+  justify-content: center;
+  align-items: center;
+}
+
+.btn-armed {
+  background-color: #5a1d20;
+}
+
+.btn-text {
+  font-size: 15px;
+  color: #d8d8d8;
+}
+
+.btn-text-armed {
+  color: #ffd5d6;
+}
+
+.btn-text-off {
+  color: #555555;
+}
+
+.version {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #666666;
 }
 </style>
