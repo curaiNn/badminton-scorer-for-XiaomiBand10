@@ -222,7 +222,8 @@ export default {
     }
     clearTimeout(this.armTimer)
     this.armed = ''
-    const record = kind === 'reset' ? resetGame(this.record) : newMatch(this.settings.rule)
+    // 清零后整场还没开始（第 1 局）时，本场赛制跟随设置
+    const record = kind === 'reset' ? setRule(resetGame(this.record), this.settings.rule) : newMatch(this.settings.rule)
     // 写入成功才回计分页；失败时留在本页，版本号后显示 S2。等待写入期间已算「正在离开」，其他操作一律忽略
     this.leaving = true
     this.saving = true

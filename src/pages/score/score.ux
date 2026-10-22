@@ -67,7 +67,7 @@ import storage from '@system.storage'
 import vibrator from '@system.vibrator'
 import brightness from '@system.brightness'
 import { RED, BLUE, deriveMatch } from '../../common/rules.js'
-import { newMatch, addPoint, undo, nextGame } from '../../common/match.js'
+import { newMatch, addPoint, undo, nextGame, setRule } from '../../common/match.js'
 import { createStore, DEFAULT_SETTINGS } from '../../common/store.js'
 import { createDevice } from '../../common/device.js'
 
@@ -290,6 +290,8 @@ export default {
 
   // 改记录 → 推算并刷新 → 存盘 → 振动
   commit(record, event) {
+    // 整场还没开始（撤销回第 1 局 0:0）时，本场赛制跟随设置（设计 4.3）
+    if (!record.pts && record.rule !== this.settings.rule) record = setRule(record, this.settings.rule)
     this.record = record
     this.render()
     this.save()
