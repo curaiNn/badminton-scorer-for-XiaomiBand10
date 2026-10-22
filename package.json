@@ -1,0 +1,20 @@
+{
+  "name": "badminton-scorer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "小米手环10 羽毛球计分（Xiaomi Vela JS 应用）",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "aiot start --watch",
+    "build": "aiot build",
+    "release": "aiot release",
+    "test": "node --test --disable-warning=MODULE_TYPELESS_PACKAGE_JSON \"test/*.test.mjs\"",
+    "icon": "node tools/gen-icon.mjs"
+  },
+  "devDependencies": {
+    "@aiot-toolkit/jsc": "^1.0.3",
+    "aiot-toolkit": "2.0.5"
+  }
+}
