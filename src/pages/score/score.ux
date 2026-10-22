@@ -72,7 +72,7 @@ const RED_CARD = 'card card-red'
 const BLUE_CARD = 'card card-blue card-gap'
 const COURT_TEXT = { right: '右区发球', left: '左区发球' }
 const SIDE_NAME = { R: '红方', B: '蓝方' }
-const TAP_GUARD_MS = 250 // 防止真机一次点击触发两次
+const TAP_GUARD_MS = 250 // 防止真机一次点击触发两次，计分、撤销、提示层按钮的点击都适用
 const EXIT_WINDOW_MS = 2000 // 两次右滑之间的间隔上限
 const SWAP_BANNER_MS = 3000
 
@@ -105,7 +105,7 @@ export default {
   store: null,
   device: null,
   loaded: false,
-  reloadOnShow: true, // 下次 onShow 时是否重新读取存储
+  reloadOnShow: false, // 下次 onShow 时是否重新读取存储（首次加载在 onInit 里）
   tapAt: 0,
   backAt: 0,
   bannerTimer: 0,
@@ -113,9 +113,10 @@ export default {
   onInit() {
     this.store = createStore(storage)
     this.device = createDevice(vibrator, brightness)
+    this.load()
   },
 
-  // 只在第一次显示和从更多页回来时重新读取。息屏再亮屏时内存里的状态才是最新的（写入可能失败过），不能用存储覆盖
+  // 从更多页回来时重新读取（更多页可能改过记录或设置）；息屏再亮屏时内存里的状态才是最新的（写入可能失败过），不能用存储覆盖
   onShow() {
     if (this.reloadOnShow) {
       this.reloadOnShow = false
@@ -216,23 +217,32 @@ export default {
 
   score(side) {
     if (!this.loaded) return
-    const now = Date.now()
-    if (now - this.tapAt < TAP_GUARD_MS) return
-    this.tapAt = now
+    if (!this.guard()) return
     const result = addPoint(this.record, side)
     if (!result.event) return
     this.commit(result.record, result.event)
     if (result.event === 'swapEnds') this.showBanner('换边', 'banner banner-swap', SWAP_BANNER_MS)
   },
 
+  // 真机上一次点击偶尔触发两次：所有点击操作共用 250ms 防抖
+  guard() {
+    const now = Date.now()
+    if (now - this.tapAt < TAP_GUARD_MS) return false
+    this.tapAt = now
+    return true
+  },
+
   tapUndo() {
     if (!this.loaded || !this.record.pts) return
+    if (!this.guard()) return
+    this.hideBanner() // 撤销后「换边」之类的提示可能已经不成立
     this.commit(undo(this.record), 'undo')
   },
 
   // 提示层按钮：一局结束时进入下一局，比赛结束时开新比赛（新比赛按当前设置的赛制）
   overAction() {
     if (!this.loaded) return
+    if (!this.guard()) return
     if (this.phase === 'gameOver') this.commit(nextGame(this.record), null)
     else if (this.phase === 'matchOver') this.commit(newMatch(this.settings.rule), null)
   },
@@ -243,6 +253,11 @@ export default {
     this.render()
     this.store.saveMatch(record)
     if (event) this.device.buzz(event, this.settings.vibrate)
+  },
+
+  hideBanner() {
+    clearTimeout(this.bannerTimer)
+    this.banner = ''
   },
 
   showBanner(text, cls, ms) {
@@ -313,7 +328,7 @@ export default {
 }
 
 .banner {
-  font-size: 16px;
+  font-size: 13px;
   color: #eeeeee;
 }
 
