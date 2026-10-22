@@ -46,16 +46,27 @@ test('success 回调给的是 { value } 对象时也能读', async () => {
   assert.deepEqual(loaded.record, record)
 })
 
-test('损坏或不合法的比赛记录：ok 为 true、record 为 null', async () => {
-  assert.deepEqual(await createStore(fakeStorage({ 'bs.match': '{oops' })).loadMatch(), {
-    ok: true,
-    record: null,
-  })
+test('比赛记录不是合法 JSON：ok 为 true、record 为 null，错误码 S3', async () => {
+  const store = createStore(fakeStorage({ 'bs.match': '{oops' }))
+  assert.deepEqual(await store.loadMatch(), { ok: true, record: null })
+  assert.equal(store.lastError(), 'S3')
+})
+
+test('比赛记录校验不通过（版本号不认识）：ok 为 true、record 为 null，错误码 S3', async () => {
   const v2 = JSON.stringify({ v: 2, rule: 21, pts: '', acked: 0 })
-  assert.deepEqual(await createStore(fakeStorage({ 'bs.match': v2 })).loadMatch(), {
-    ok: true,
-    record: null,
+  const store = createStore(fakeStorage({ 'bs.match': v2 }))
+  assert.deepEqual(await store.loadMatch(), { ok: true, record: null })
+  assert.equal(store.lastError(), 'S3')
+})
+
+test('没有存储的比赛（{ value: 空串 }）：不算错误', async () => {
+  const store = createStore({
+    get(opts) {
+      opts.success({ value: '' })
+    },
   })
+  assert.deepEqual(await store.loadMatch(), { ok: true, record: null })
+  assert.equal(store.lastError(), '')
 })
 
 test('读取失败：ok 为 false、record 为 null，错误码 S1', async () => {

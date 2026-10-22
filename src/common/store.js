@@ -19,18 +19,20 @@ export function normalizeSettings(raw) {
   }
 }
 
-// storage.get 的 success 可能直接给字符串，也可能给 { value: 字符串 }
-function parseStored(d) {
-  if (typeof d === 'string') {
-    if (!d) return null
-    try {
-      return JSON.parse(d)
-    } catch (e) {
-      return null
-    }
+// storage.get 的 success 可能直接给字符串，也可能给 { value: 字符串 }；取不到字符串时当作空串
+function storedText(d) {
+  if (typeof d === 'string') return d
+  if (d && typeof d === 'object' && typeof d.value === 'string') return d.value
+  return ''
+}
+
+function parseJson(text) {
+  if (!text) return null
+  try {
+    return JSON.parse(text)
+  } catch (e) {
+    return null
   }
-  if (d && typeof d === 'object' && typeof d.value === 'string') return parseStored(d.value)
-  return null
 }
 
 export function createStore(storage, timeoutMs = 1500) {
@@ -67,8 +69,11 @@ export function createStore(storage, timeoutMs = 1500) {
     return call(
       'get',
       { key: key, default: '' },
-      (d) => ({ ok: true, value: parseStored(d) }),
-      { ok: false, value: null },
+      (d) => {
+        const text = storedText(d)
+        return { ok: true, text: text, value: parseJson(text) }
+      },
+      { ok: false, text: '', value: null },
       'S1'
     )
   }
@@ -88,8 +93,14 @@ export function createStore(storage, timeoutMs = 1500) {
   }
 
   return {
-    // { ok, record }：record 为 null 表示没有记录或数据不合法
-    loadMatch: () => read(MATCH_KEY).then((r) => ({ ok: r.ok, record: normalize(r.value) })),
+    // { ok, record }：record 为 null 表示没有记录或数据不合法。
+    // 存储里有数据但解析或校验不通过时按没有记录处理（读取本身成功，ok 仍为 true），记错误码 S3
+    loadMatch: () =>
+      read(MATCH_KEY).then((r) => {
+        const record = normalize(r.value)
+        if (r.text && !record) lastError = 'S3'
+        return { ok: r.ok, record: record }
+      }),
     saveMatch: (record) => write(MATCH_KEY, record),
     // { ok, settings }：settings 一定是完整的设置，读失败时是默认值
     loadSettings: () => read(SETTINGS_KEY).then((r) => ({ ok: r.ok, settings: normalizeSettings(r.value) })),
