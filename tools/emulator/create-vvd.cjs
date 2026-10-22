@@ -66,7 +66,12 @@ const manager = new emu.VvdManager({ sdkHome, vvdHome })
 async function main() {
   // 已经有同名模拟器就不覆盖，避免丢掉里面装好的应用和数据
   if (fs.existsSync(path.resolve(vvdHome, `${name}.vvd`))) {
-    console.log(`模拟器 ${name} 已存在（${vvdHome}），跳过创建。要重建请先执行 npx aiot deleteVVD`)
+    const info = manager.getVvdInfo(name)
+    const size = info.width && info.height ? `${info.width}x${info.height}` : '尺寸未知'
+    console.log(`模拟器 ${name} 已存在（${size}，镜像 ${info.imageType}，位于 ${vvdHome}），跳过创建。`)
+    if (size !== '212x520') {
+      console.log('它的尺寸不是手环10 的 212x520；要重建请先执行 npx aiot deleteVVD，再重新运行本命令')
+    }
     return
   }
 
@@ -74,6 +79,12 @@ async function main() {
   const known = emu.VelaImageVersionList.map((item) => item.value)
   if (!known.includes(imageType)) {
     fail(`未知的系统镜像 ${imageType}，可选：${known.join('、')}`)
+  }
+
+  // 模拟器程序由 initEmulatorEnv 下载；缺了的话先提示，免得下完镜像还是启动不了
+  const emulatorBin = manager.getEmulatorBinPath(sdkHome)
+  if (!fs.existsSync(emulatorBin)) {
+    fail(`找不到模拟器程序 ${emulatorBin}，请先执行 npx aiot initEmulatorEnv，再重新运行本命令`)
   }
 
   await ensureImage(manager)
