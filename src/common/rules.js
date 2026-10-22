@@ -22,6 +22,11 @@ export function isGameWon(own, other, rule) {
 }
 
 // 推算整场状态。record: { rule, pts, acked }，acked 是用户已点过「下一局」的已结束局数。
+// 入参必须已规范化（rule 为 21|15，pts 只含 R/B，acked 为范围内的整数），不要直接传入存储里读出的原始数据。
+// 返回：valid（比赛结束后、或在用户还没开始的局里有得分时为 false）、phase、
+// games（只含已结束的局 { red, blue, winner }）、completed、gamesWon、
+// current（{ index, red, blue }：playing 时为进行中的局，否则为刚结束的那一局）、
+// server / court（仅 playing 时有值，其余为 null）、matchWinner。
 export function deriveMatch(record) {
   const games = [] // 已结束的局：{ red, blue, winner }
   const gamesWon = { red: 0, blue: 0 }
@@ -32,8 +37,8 @@ export function deriveMatch(record) {
   let valid = true
 
   for (let i = 0; i < record.pts.length; i++) {
-    if (matchWinner) {
-      valid = false // 比赛结束后还有得分，说明数据损坏
+    if (matchWinner || games.length > record.acked) {
+      valid = false // 比赛结束后、或在用户还没开始的局里有得分，说明数据损坏
       break
     }
     const side = record.pts[i]

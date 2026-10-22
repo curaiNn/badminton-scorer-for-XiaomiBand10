@@ -103,6 +103,7 @@ test('15 分制：15 分胜、14 平须领先 2 分、先到 21 胜', () => {
 test('2:0 比赛结束', () => {
   const s = deriveMatch(rec(21, R(21) + R(21), 1))
   assert.equal(s.phase, 'matchOver')
+  assert.equal(s.valid, true)
   assert.equal(s.matchWinner, 'R')
   assert.deepEqual(s.gamesWon, { red: 2, blue: 0 })
   assert.equal(s.games.length, 2)
@@ -113,6 +114,7 @@ test('2:0 比赛结束', () => {
 test('1:1 进入第 3 局，第 2 局胜方发球', () => {
   const s = deriveMatch(rec(21, R(21) + B(21), 2))
   assert.equal(s.phase, 'playing')
+  assert.deepEqual(s.gamesWon, { red: 1, blue: 1 })
   assert.deepEqual(s.current, { index: 2, red: 0, blue: 0 })
   assert.equal(s.server, 'B')
   assert.equal(s.court, 'right')
@@ -127,4 +129,27 @@ test('2:1 比赛结束，记录每局比分', () => {
 
 test('比赛结束后还有得分：valid 为 false', () => {
   assert.equal(deriveMatch(rec(21, R(21) + R(21) + 'B', 1)).valid, false)
+})
+
+test('蓝方 0:2 获胜', () => {
+  const s = deriveMatch(rec(21, B(21) + B(21), 1))
+  assert.equal(s.phase, 'matchOver')
+  assert.equal(s.matchWinner, 'B')
+  assert.deepEqual(s.gamesWon, { red: 0, blue: 2 })
+  assert.equal(s.valid, true)
+})
+
+test('第 2 局蓝方胜、未点下一局：gameOver，局分 1:1', () => {
+  const s = deriveMatch(rec(21, R(21) + B(21), 1))
+  assert.equal(s.phase, 'gameOver')
+  assert.deepEqual(s.current, { index: 1, red: 0, blue: 21 })
+  assert.deepEqual(s.gamesWon, { red: 1, blue: 1 })
+})
+
+test('在还没开始的局里有得分：valid 为 false', () => {
+  const bad = [R(21) + 'RR', R(21) + B(21), R(21) + B(21) + 'RRR']
+  for (const pts of bad) {
+    assert.equal(deriveMatch(rec(21, pts, 0)).valid, false)
+  }
+  assert.equal(deriveMatch(rec(21, R(21) + B(21) + R(21), 2)).valid, true)
 })
