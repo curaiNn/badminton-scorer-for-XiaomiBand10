@@ -4,6 +4,8 @@
 
 已在小米手环10 NFC 版（国行，固件 3.1.28）上用 AstroBox 2.2.0 安装成功。安装包在 [Releases 页面](https://github.com/curaiNn/badminton-scorer-for-XiaomiBand10/releases/latest) 下载，安装步骤见「[安装到手环](#安装到手环)」。
 
+**English:** A badminton scorekeeper for the Xiaomi Smart Band 10, built as a Xiaomi Vela JS app (`.rpk`) and sideloaded with AstroBox. Tap the red or blue side to score, with undo, serve hints, best-of-three games under 21- or 15-point rules, vibration and keep-screen-on. Free for non-commercial use; commercial use needs a separate license. The documentation below is in Chinese.
+
 > 这是个人项目，和小米公司无关。小米没有给个人开发者开放装机渠道，下文的安装方法用第三方工具 AstroBox 侧载，风险自负。
 >
 > 非商业使用免费，商业使用需要另外取得授权，见文末「[许可证](#许可证)」。商业合作请联系 591142229@qq.com。
@@ -50,7 +52,7 @@
 需要准备：
 
 - 小米手环10。我用的是 NFC 版国行，手机是安卓，装的小米运动健康。
-- 一台有蓝牙的电脑。下面以 Mac 为例；AstroBox 也有 Windows、Linux 和安卓版本，步骤类似，我没有测过。
+- 一台有蓝牙的电脑。下面以 Mac 为例；AstroBox 也有 Windows、Linux、安卓和 iOS 版本，步骤类似，我没有测过。
 - 安装包 `.rpk`：到 [Releases 页面](https://github.com/curaiNn/badminton-scorer-for-XiaomiBand10/releases/latest) 下载最新版的 `com.curain.badminton.debug.<版本>.rpk`。想自己改代码的话，按下文「从源码构建」生成，在 `dist/` 目录下。
 
 ### 1. 安装 AstroBox
@@ -74,7 +76,7 @@ AuthKey 是手环的连接凭据，AstroBox 靠它连接手环。
 
 - AuthKey 不要截图公开、发给别人或贴到网页上。万一泄露，在小米运动健康里解绑手环再重新绑定，旧的就作废了。
 - 导出的日志里还有账号令牌等其他凭据，取完 AuthKey 就把日志删掉。
-- 想留着以后用，可以存进项目根目录的 `astrobox-authkey.txt`（已在 `.gitignore` 里，不会进仓库），要用时运行 `pbcopy < astrobox-authkey.txt` 复制到剪贴板。
+- 想留着以后用，就存进密码管理器，不要明文放在网盘、聊天记录或代码仓库里。
 
 ### 3. 第一次打开 AstroBox：不用登录
 
@@ -116,16 +118,15 @@ Mac 上如果报 `RFCOMM channel disconnected`，到 Mac 的蓝牙设置里忽�
 3. 打开小米运动健康，在「设备」页点「连接」。
 4. 手机弹出蓝牙配对请求时点「配对」。安卓上这个请求也可能出现在通知栏，点「配对与连接」即可。手环上如果要确认，也点确认。
 
-这样连回来不会重置手环，计分器还在。计分器装在手环本地，使用时不需要连着 AstroBox。
+这样连回来不会重置手环，计分器还在。计分器装在手环本地，使用时不需要连着 AstroBox。因为蓝牙配对换过一次，有人反映之后要重新设置「手环解锁手机」。
 
 连不上时，不要点小米运动健康右上角的「+」重新添加手环，也不要解除绑定。这两种操作都可能让手环恢复出厂设置，计分器得重装，AuthKey 也会作废。
 
-AstroBox 连接时会解除系统层面的蓝牙绑定，有人反映之后要重新设置「手环解锁手机」。
+## 常见问题
 
-### 装不上或用起来不对
-
-- **手环拒绝安装：** 把 `src/manifest.json` 的 `minPlatformVersion` 从 1200 改成 1000，重新构建再试；还不行就换用发布包，见下文「发布包签名」。
-- **升级安装：** 每次重装前把 `src/manifest.json` 的 `versionCode` 加 1，包名和签名证书保持不变。
+- **升级到新版本：** 从 [Releases 页面](https://github.com/curaiNn/badminton-scorer-for-XiaomiBand10/releases/latest) 下载新版安装包，按上面第 4–7 步再装一次。
+- **手环拒绝安装（需要从源码构建）：** 把 `src/manifest.json` 的 `minPlatformVersion` 从 1200 改成 1000，重新构建再试；还不行就换用发布包，见下文「发布包签名」。
+- **自己构建后重装：** 每次重装前把 `src/manifest.json` 的 `versionCode` 加 1，包名和签名证书保持不变，否则手环可能拒绝覆盖安装。
 - **屏幕常亮不生效：** 说明手环没响应应用的常亮请求。可以在手环的系统设置里调长息屏时间（最长 5 分钟），或者打开「持续亮屏」（不同固件里名字可能不同；小米提示开启后耗电会明显增加）。
 - **更多页版本号后面带了字母：** 这是最近一次出错留下的错误码（零售手环上没有调试控制台）：
 
@@ -141,7 +142,7 @@ AstroBox 连接时会解除系统层面的蓝牙绑定，有人反映之后要�
 
 ## 从源码构建
 
-需要 Node 22 或更新版本。如果 `npm -v` 显示的版本很旧（比如 PATH 里还有另一份旧的 npm），先切到 Node 22 自带的 npm 再运行下面的命令。
+需要 Node 22 或更新版本。
 
 ```bash
 npm install
@@ -197,9 +198,11 @@ openssl req -newkey rsa:2048 -nodes -keyout sign/release/private.pem -x509 -days
 
 ## 项目结构
 
-```
+```text
 src/
+  app.ux             应用入口
   manifest.json      应用清单（包名、权限、页面）
+  images/            应用图标
   pages/score/       计分页
   pages/more/        更多页
   common/rules.js    比赛规则：从得分顺序推出比分、局分、发球方
@@ -209,20 +212,28 @@ src/
 test/                单元测试（Node 自带的测试框架）
 tools/               图标生成脚本、模拟器脚本
 docs/                设计文档、实施计划、真机验收清单、截图
+reports/             可行性调研报告
+research_notes/      调研笔记：开发工具链、装机途径、平台能力、前人经验与坑
 ```
 
 ## 文档
 
 - 可行性调研：[reports/小米手环10 第三方应用开发可行性.md](reports/小米手环10%20第三方应用开发可行性.md)
+- 调研笔记：[research_notes/小米手环10 第三方应用开发可行性/](research_notes/小米手环10%20第三方应用开发可行性/)
 - 设计：[docs/superpowers/specs/2026-10-22-badminton-scorer-design.md](docs/superpowers/specs/2026-10-22-badminton-scorer-design.md)
 - 实施计划：[docs/superpowers/plans/2026-10-22-badminton-scorer.md](docs/superpowers/plans/2026-10-22-badminton-scorer.md)
 - 真机验收：[docs/real-device-checklist.md](docs/real-device-checklist.md)
+
+## 反馈与贡献
+
+- 发现问题或有功能建议，欢迎在 [Issues](https://github.com/curaiNn/badminton-scorer-for-XiaomiBand10/issues) 里提。请写上手环型号、固件版本，以及更多页底部显示的版本号（后面带错误码的话一起写上）。
+- 暂不接受 Pull Request。有改进想法可以先在 Issues 里讨论。
 
 ## 许可证
 
 本项目采用 [PolyForm Noncommercial License 1.0.0](LICENSE.md)（非商业许可证）。
 
-- **可以免费使用：** 个人学习、研究、自用、业余爱好，以及学校、公益组织、科研机构、政府机构使用。可以修改，也可以转发，但要附上许可证全文和 [LICENSE.md](LICENSE.md) 开头的 `Required Notice` 两行。
+- **可以免费使用：** 个人学习、研究、自用、业余爱好，以及学校、公益组织、科研机构、政府机构使用。可以修改，也可以转发，但要同时附上许可证全文（或许可证的网址）和 [LICENSE.md](LICENSE.md) 开头的 `Required Notice` 两行。
 - **商业用途需要授权：** 比如拿来做收费产品、集成进商业应用、在公司业务中使用，都不在免费授权范围内，商业授权收费。需要商业授权或谈其他合作，请发邮件到 591142229@qq.com，也可以在 [Issues](https://github.com/curaiNn/badminton-scorer-for-XiaomiBand10/issues) 里留言。
 - 软件按原样提供，不提供任何担保。
 
